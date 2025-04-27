@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Upload de CSV - Verificar IPs</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+  <div class="container py-5">
+    <div class="card shadow">
+      <div class="card-body">
+        <h1 class="card-title mb-4 text-center">Verificar Status dos IPs</h1>
+
+        <form id="uploadForm">
+          <div class="mb-3">
+            <label for="fileInput" class="form-label">Selecione o arquivo CSV</label>
+            <input type="file" class="form-control" id="fileInput" accept=".csv" required>
+          </div>
+          <button type="submit" class="btn btn-primary w-100">Enviar e Verificar</button>
+        </form>
+
+        <div id="results" class="mt-5"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('uploadForm');
+    const resultsDiv = document.getElementById('results');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const fileInput = document.getElementById('fileInput');
+      const file = fileInput.files[0];
+
+      if (!file) {
+        alert('Por favor, selecione um arquivo CSV.');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        resultsDiv.innerHTML = '<p class="text-center">Processando...</p>';
+
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!response.ok) {
+          throw new Error('Erro ao enviar o arquivo.');
+        }
+
+        const data = await response.json();
+
+        let html = `
+          <h2 class="text-center mb-4">Resultados</h2>
+          <table class="table table-bordered table-striped">
+            <thead>
+              <tr>
+                <th>Loja</th>
+                <th>IP</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+        `;
+
+        data.forEach(item => {
+          html += `
+            <tr>
+              <td>${item.loja}</td>
+              <td>${item.ip}</td>
+              <td><span class="badge ${item.status === 'Online' ? 'bg-success' : 'bg-danger'}">${item.status}</span></td>
+            </tr>
+          `;
+        });
+
+        html += `
+            </tbody>
+          </table>
+        `;
+
+        resultsDiv.innerHTML = html;
+
+      } catch (error) {
+        console.error(error);
+        resultsDiv.innerHTML = '<p class="text-danger text-center">Erro ao processar o arquivo.</p>';
+      }
+    });
+  </script>
+
+</body>
+</html>

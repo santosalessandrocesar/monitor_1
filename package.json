@@ -1,0 +1,11 @@
+{
+    "name": "verificar-ips",
+    "version": "1.0.0",
+    "main": "index.js",
+    "type": "module",
+    "dependencies": {
+      "csv-parser": "^3.0.0",
+      "formidable": "^3.4.0"
+    }
+  }
+  
