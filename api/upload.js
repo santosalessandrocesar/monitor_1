@@ -1,11 +1,10 @@
-import formidable from 'formidable';
-import fs from 'fs';
-import csv from 'csv-parser';
+import csvParser from 'csv-parser';
 import net from 'net';
+import { PassThrough } from 'stream';
 
 export const config = {
   api: {
-    bodyParser: false, // importante para upload de arquivos
+    bodyParser: false,
   },
 };
 
@@ -14,39 +13,37 @@ export default async function handler(req, res) {
     return res.status(405).json({ message: 'Método não permitido' });
   }
 
-  const form = new formidable.IncomingForm();
+  const results = [];
 
-  form.parse(req, async (err, fields, files) => {
-    if (err) {
-      return res.status(500).json({ message: 'Erro no upload' });
-    }
+  const stream = new PassThrough();
+  req.pipe(stream);
 
-    const file = files.file[0].filepath;
+  stream
+    .pipe(csvParser())
+    .on('data', (data) => {
+      results.push(data);
+    })
+    .on('end', async () => {
+      const checks = await Promise.all(
+        results.map(async ({ loja, ip }) => {
+          const status = await checkIP(ip);
+          return { loja: loja || 'Desconhecida', ip: ip || 'IP não informado', status };
+        })
+      );
 
-    const results = [];
-
-    fs.createReadStream(file)
-      .pipe(csv())
-      .on('data', (data) => {
-        results.push(data);
-      })
-      .on('end', async () => {
-        const checks = await Promise.all(
-          results.map(async ({ loja, ip }) => {
-            const status = await checkIP(ip);
-            return { loja, ip, status };
-          })
-        );
-
-        res.status(200).json(checks);
-      });
-  });
+      res.status(200).json(checks);
+    })
+    .on('error', (err) => {
+      console.error(err);
+      res.status(500).json({ message: 'Erro ao processar o CSV' });
+    });
 }
 
 function checkIP(ip) {
   return new Promise((resolve) => {
     const socket = new net.Socket();
-    const timeout = 2000; // 2 segundos
+    const timeout = 2000;
+
     let isOnline = false;
 
     socket.setTimeout(timeout);
@@ -64,6 +61,6 @@ function checkIP(ip) {
       resolve(isOnline ? 'Online' : 'Offline');
     });
 
-    socket.connect(80, ip); // Porta 80
+    socket.connect(80, ip);
   });
 }
