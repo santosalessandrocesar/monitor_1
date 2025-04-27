@@ -1,44 +1,53 @@
-import formidable from 'formidable';
-import fs from 'fs';
-import csv from 'csv-parser';
+import csvParser from 'csv-parser';
 import net from 'net';
+import multer from 'multer';
+import { Readable } from 'stream';
+
+const upload = multer();
 
 export const config = {
   api: {
-    bodyParser: false, // importante para upload de arquivos
+    bodyParser: false, // Necessário para lidar com uploads de arquivos
   },
 };
 
-export default async function handler(req, res) {
+export default function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Método não permitido' });
   }
 
-  const form = new formidable.IncomingForm();
-
-  form.parse(req, async (err, fields, files) => {
+  upload.single('file')(req, {}, async (err) => {
     if (err) {
-      return res.status(500).json({ message: 'Erro no upload' });
+      console.error(err);
+      return res.status(500).json({ message: 'Erro ao fazer upload do arquivo' });
     }
 
-    const file = files.file[0].filepath;
-
     const results = [];
+    const stream = Readable.from(req.file.buffer);
 
-    fs.createReadStream(file)
-      .pipe(csv())
+    stream
+      .pipe(csvParser())
       .on('data', (data) => {
         results.push(data);
       })
       .on('end', async () => {
-        const checks = await Promise.all(
-          results.map(async ({ loja, ip }) => {
-            const status = await checkIP(ip);
-            return { loja, ip, status };
-          })
-        );
+        try {
+          const checks = await Promise.all(
+            results.map(async ({ loja, ip }) => {
+              const status = await checkIP(ip);
+              return { loja, ip, status };
+            })
+          );
 
-        res.status(200).json(checks);
+          res.status(200).json(checks);
+        } catch (error) {
+          console.error(error);
+          res.status(500).json({ message: 'Erro ao processar os dados' });
+        }
+      })
+      .on('error', (err) => {
+        console.error(err);
+        res.status(500).json({ message: 'Erro ao processar o arquivo CSV' });
       });
   });
 }
@@ -46,7 +55,7 @@ export default async function handler(req, res) {
 function checkIP(ip) {
   return new Promise((resolve) => {
     const socket = new net.Socket();
-    const timeout = 2000; // 2 segundos
+    const timeout = 2000; // 2 segundos de timeout
     let isOnline = false;
 
     socket.setTimeout(timeout);
@@ -64,6 +73,6 @@ function checkIP(ip) {
       resolve(isOnline ? 'Online' : 'Offline');
     });
 
-    socket.connect(80, ip); // Porta 80
+    socket.connect(80, ip); // Conectar à porta 80
   });
 }
