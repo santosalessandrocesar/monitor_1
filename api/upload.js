@@ -1,13 +1,9 @@
 import csvParser from 'csv-parser';
 import net from 'net';
-import multer from 'multer';
-import { Readable } from 'stream';
-
-const upload = multer();
 
 export const config = {
   api: {
-    bodyParser: false, // Necessário para lidar com uploads de arquivos
+    bodyParser: false, // importante para upload de arquivos
   },
 };
 
@@ -16,38 +12,31 @@ export default function handler(req, res) {
     return res.status(405).json({ message: 'Método não permitido' });
   }
 
-  upload.single('file')(req, {}, async (err) => {
+  const form = new formidable.IncomingForm();
+
+  form.parse(req, async (err, fields, files) => {
     if (err) {
-      console.error(err);
-      return res.status(500).json({ message: 'Erro ao fazer upload do arquivo' });
+      return res.status(500).json({ message: 'Erro no upload' });
     }
 
-    const results = [];
-    const stream = Readable.from(req.file.buffer);
+    const file = files.file[0].filepath;
 
-    stream
-      .pipe(csvParser())
+    const results = [];
+
+    fs.createReadStream(file)
+      .pipe(csv())
       .on('data', (data) => {
         results.push(data);
       })
       .on('end', async () => {
-        try {
-          const checks = await Promise.all(
-            results.map(async ({ loja, ip }) => {
-              const status = await checkIP(ip);
-              return { loja, ip, status };
-            })
-          );
+        const checks = await Promise.all(
+          results.map(async ({ loja, ip }) => {
+            const status = await checkIP(ip);
+            return { loja, ip, status };
+          })
+        );
 
-          res.status(200).json(checks);
-        } catch (error) {
-          console.error(error);
-          res.status(500).json({ message: 'Erro ao processar os dados' });
-        }
-      })
-      .on('error', (err) => {
-        console.error(err);
-        res.status(500).json({ message: 'Erro ao processar o arquivo CSV' });
+        res.status(200).json(checks);
       });
   });
 }
@@ -55,7 +44,7 @@ export default function handler(req, res) {
 function checkIP(ip) {
   return new Promise((resolve) => {
     const socket = new net.Socket();
-    const timeout = 2000; // 2 segundos de timeout
+    const timeout = 2000; // 2 segundos
     let isOnline = false;
 
     socket.setTimeout(timeout);
@@ -73,6 +62,6 @@ function checkIP(ip) {
       resolve(isOnline ? 'Online' : 'Offline');
     });
 
-    socket.connect(80, ip); // Conectar à porta 80
+    socket.connect(80, ip); // Porta 80
   });
 }
